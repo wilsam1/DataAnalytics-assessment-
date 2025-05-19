@@ -1,0 +1,40 @@
+Assessment_Q1.sql
+#high value customers with multiple products
+#A query to find customers with at least one funded savings plan and one funded investment plan, sorted by total deposit
+
+select u.id as owner_id, u.first_name as name,s.savings_count, p.investment_count,(s.total_savings + p.total_investment) as total_deposit
+from adashi_staging.users_customuser u
+join  (select owner_id,count(*)as savings_count,sum(amount) as total_savings from savings_savingsaccount  group by owner_id) s on u.id=s.owner_id 
+join (select owner_id,count(*)as investment_count, sum(amount)as total_investment from plans_plan where is_a_fund = 1 group by owner_id) p on u.id= p.owner_id
+where savings_count=1 and investment_count = 1 order by total_deposit desc;
+
+#Assessment_Q2.sql
+#Transaction frequency analysis
+#Average number of transactions per customer per month and categorize them
+
+with monthly_trn as (select owner_id,count(*)/count(distinct date_format(transaction_date,'%y-%m')) as 
+avg_transactions_per_month from savings_savingsaccount group by owner_id),
+categorized as (select case when avg_transactions_per_month >=10 then 'high frequency'
+when avg_transactions_per_month between 3 and 9 then 'medium frequency' else 'low frequency' end as frequency_category,
+avg_transactions_per_month from monthly_trn) select frequency_category, count(*) as customer_count, 
+round(avg(avg_transactions_per_month),1) as avg_transactions_per_month from categorized group by frequency_category;
+
+#Assessment_Q3.sql
+#Account inactivity Alert
+#To find savings or investment accounts with no transactions in the last 365 days
+
+select id as plan_id, owner_id,'savings' as type, transaction_date, datediff(current_date, transaction_date) as inactivity_days
+from savings_savingsaccount where datediff(current_date, transaction_date) > 385
+union
+select id as plan_id, owner_id,'investment' as type, transaction_date, datediff(current_date, transaction_date) as inactivity_days
+from savings_savingsaccount where datediff(current_date, transaction_date) > 385;
+
+#Assessment_Q4.sql
+#Customer Lifetime Value (CLV) Estimation
+#To find each customers account tenure since sign up , total transactions, estimated CLV, order by estimated CLV from highest to lowest
+
+select u.id as customer_id, u.first_name as name, timestampdiff(month,u.date_joined, curdate()) as
+tenure_months, count(s.id) as total_transactions, round((count(s.id)/nullif(timestampdiff(month,u.date_joined, curdate()),0))
+*12 *avg(s.amount), 2)
+as estimated_clv from users_customuser u join savings_savingsaccount s on u.id =s.owner_id group by u.id, u.name, u.date_joined
+order by estimated_clv desc
